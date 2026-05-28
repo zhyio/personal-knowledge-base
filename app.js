@@ -44,7 +44,7 @@ async function init() {
 
 async function fetchNotes() {
   if (!supabaseClient) {
-    showDemoData();
+    await tryLoadLocalData();
     return;
   }
   
@@ -57,15 +57,28 @@ async function fetchNotes() {
     if (error) throw error;
     
     if (!data || data.length === 0) {
-      showDemoData(); // fallback if empty table
+      await tryLoadLocalData(); // fallback if empty table
     } else {
       notesData = data;
     }
   } catch (err) {
-    console.error('Failed to fetch from Supabase:', err);
-    // Fallback to empty state or demo data if table doesn't exist yet
-    showDemoData();
+    console.warn('Failed to fetch from Supabase (table might not exist). Falling back to local data.json.');
+    await tryLoadLocalData();
   }
+}
+
+async function tryLoadLocalData() {
+  try {
+    const res = await fetch('data.json');
+    if (res.ok) {
+      notesData = await res.json();
+      notesData.sort((a,b) => new Date(b.last_modified) - new Date(a.last_modified));
+      return;
+    }
+  } catch (e) {
+    console.warn("No data.json found locally.");
+  }
+  showDemoData();
 }
 
 function showDemoData() {

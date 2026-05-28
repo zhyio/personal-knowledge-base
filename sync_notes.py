@@ -58,6 +58,14 @@ def sync_notes():
     if not notes_data:
         print("No markdown files found.")
         return
+        
+    # Write fallback data.json
+    try:
+        with open("data.json", "w", encoding="utf-8") as f:
+            json.dump(notes_data, f, ensure_ascii=False, indent=2)
+        print("Saved fallback data.json")
+    except Exception as e:
+        print(f"Failed to save data.json: {e}")
 
     print(f"Found {len(notes_data)} notes. Uploading to Supabase...")
     
@@ -69,10 +77,10 @@ def sync_notes():
             url = f"{SUPABASE_URL}/rest/v1/kb_notes?on_conflict=id"
             res = requests.post(url, headers=headers, json=chunk)
             if res.status_code in [200, 201]:
-                print(f"Synced {i + len(chunk)}/{len(notes_data)} notes.")
+                print(f"Synced {i + len(chunk)}/{len(notes_data)} notes to Supabase.")
             else:
-                print(f"Failed to sync chunk starting at index {i}. Status: {res.status_code}")
-                print(res.text)
+                print(f"Failed to sync chunk to Supabase. Status: {res.status_code}")
+                # We don't print full error to avoid clutter, since it usually means table doesn't exist yet
         except Exception as e:
             print(f"Error making request to Supabase: {e}")
 
