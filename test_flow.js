@@ -45,6 +45,7 @@ const server = http.createServer((req, res) => {
           }
           return { ok: false };
         };
+        window.prompt = () => "Auto Created Note";
       }
     });
     
@@ -106,13 +107,30 @@ const server = http.createServer((req, res) => {
           const localPinned = window.localStorage.getItem('kb_offline_notes');
           check(localPinned && localPinned.includes("pinned: true"), "Pin state added to frontmatter in localStorage");
           
-          if (allPass) {
-            console.log("🎉 All full-flow tests passed!");
-            process.exit(0);
-          } else {
-            console.log("Some tests failed.");
-            process.exit(1);
-          }
+          // TEST 5: Create New Note
+          const btnNewNote = document.getElementById("btnNewNote");
+          btnNewNote.click(); // Uses mocked prompt
+          
+          setTimeout(() => {
+            const editor = document.getElementById("modalNoteEditor");
+            check(!editor.classList.contains("hidden") && editor.value.includes("Auto Created Note"), "New note created and opened in edit mode");
+            
+            const saveBtn = document.getElementById("btnSaveNote");
+            saveBtn.click();
+            
+            setTimeout(() => {
+              const localNotes = window.localStorage.getItem('kb_offline_notes');
+              check(localNotes && localNotes.includes("Auto Created Note"), "New note persisted to localStorage");
+              
+              if (allPass) {
+                console.log("🎉 All full-flow tests passed including NEW NOTE!");
+                process.exit(0);
+              } else {
+                console.log("Some tests failed.");
+                process.exit(1);
+              }
+            }, 500);
+          }, 500);
         }, 500);
       }, 500);
     }, 2000); // 2s wait for fetch and render

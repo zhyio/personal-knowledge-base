@@ -29,6 +29,7 @@ const btnBack = document.getElementById('btnBack');
 const folderTitle = document.getElementById('folderTitle');
 const folderNotesGrid = document.getElementById('folderNotesGrid');
 
+const btnNewNote = document.getElementById('btnNewNote');
 const noteModal = document.getElementById('noteModal');
 const btnCloseNote = document.getElementById('btnCloseNote');
 const btnPinNote = document.getElementById('btnPinNote');
@@ -288,6 +289,27 @@ async function togglePin() {
   await saveNote(newContent);
 }
 
+function createNewNote() {
+  const title = prompt("请输入新笔记的标题:", "无标题笔记");
+  if (!title) return; // User cancelled
+  
+  const id = 'kb_' + Date.now();
+  const folder = currentFolder || '未分类';
+  const newNote = {
+    id: id,
+    title: title,
+    content: `# ${title}\n\n`,
+    folder: folder,
+    last_modified: new Date().toISOString(),
+    isPinned: false,
+    cleanMarkdown: `# ${title}\n\n`
+  };
+  
+  notesData.unshift(newNote); // Add to beginning
+  openNote(id);
+  toggleEdit(); // Immediately enter edit mode
+}
+
 async function saveNote(overrideContent = null) {
   if (!currentNoteId) return;
   const newContent = overrideContent || modalNoteEditor.value;
@@ -306,8 +328,13 @@ async function saveNote(overrideContent = null) {
   if (supabaseClient) {
     try {
       await supabaseClient.from('kb_notes')
-        .update({ content: newContent, last_modified: notesData[noteIndex].last_modified })
-        .eq('id', currentNoteId);
+        .upsert({ 
+          id: notesData[noteIndex].id,
+          title: notesData[noteIndex].title,
+          content: newContent, 
+          folder: notesData[noteIndex].folder,
+          last_modified: notesData[noteIndex].last_modified 
+        });
     } catch (e) {}
   }
   
@@ -343,6 +370,8 @@ btnBack.addEventListener('click', () => {
   searchInput.value = '';
   renderDashboard();
 });
+
+btnNewNote.addEventListener('click', createNewNote);
 
 btnCloseNote.addEventListener('click', closeNote);
 btnPinNote.addEventListener('click', togglePin);
