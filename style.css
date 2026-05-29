@@ -190,6 +190,28 @@ body {
   .folders-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
 }
 
+@media (min-width: 768px) {
+  .app-container {
+    max-width: 1120px;
+  }
+
+  .main-content {
+    padding-inline: 28px;
+  }
+
+  .pinned-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .recent-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .folders-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+}
+
 /* Cards */
 .card-base {
   background: var(--bg-card);
