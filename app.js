@@ -185,9 +185,12 @@ function openNote(id) {
   isEditing = false;
   modalNoteTitle.textContent = note.title;
   
-  // Parse wiki links [[Note Title]]
-  let parsedContent = note.content.replace(/\[\[(.*?)\]\]/g, (match, title) => {
-    return `<a href="#" class="internal-link" data-target="${title}">${title}</a>`;
+  // Parse wiki links [[Note Title]] or [[Folder/Note Title|Alias]]
+  let parsedContent = note.content.replace(/\[\[(.*?)\]\]/g, (match, inner) => {
+    const parts = inner.split('|');
+    const target = parts[0];
+    const display = parts[1] || target;
+    return `<a href="#" class="internal-link" data-target="${target}">${display}</a>`;
   });
   
   // Parse markdown
@@ -198,12 +201,28 @@ function openNote(id) {
   modalNoteContent.querySelectorAll('.internal-link').forEach(link => {
     link.addEventListener('click', (e) => {
       e.preventDefault();
-      const targetTitle = e.target.dataset.target;
-      const targetNote = notesData.find(n => n.title.toLowerCase() === targetTitle.toLowerCase());
+      const rawTarget = e.target.dataset.target;
+      const targetLower = rawTarget.toLowerCase();
+      
+      const targetNote = notesData.find(n => {
+        const idLower = n.id.toLowerCase();
+        const titleLower = n.title.toLowerCase();
+        // 1. Direct title match (basename)
+        if (titleLower === targetLower) return true;
+        // 2. Full path match (ignoring .md extension)
+        if (idLower.replace(/\.md$/, '') === targetLower) return true;
+        // 3. Sometimes target includes .md
+        if (idLower === targetLower) return true;
+        // 4. If target is a partial path that matches the end of the id
+        if (idLower.endsWith('/' + targetLower + '.md')) return true;
+        
+        return false;
+      });
+      
       if (targetNote) {
         openNote(targetNote.id);
       } else {
-        alert(`未找到笔记: ${targetTitle}`);
+        alert(`未找到笔记: ${rawTarget}`);
       }
     });
   });
