@@ -220,7 +220,9 @@ function openNote(id) {
   modalNoteContent.innerHTML = marked.parse(parsedContent);
   modalNoteEditor.value = note.content;
   
-  modalNoteContent.querySelectorAll('pre code').forEach(hljs.highlightElement);
+  if (window.hljs) {
+    modalNoteContent.querySelectorAll('pre code').forEach(window.hljs.highlightElement);
+  }
   
   modalNoteContent.querySelectorAll('.internal-link').forEach(link => {
     link.addEventListener('click', (e) => {
