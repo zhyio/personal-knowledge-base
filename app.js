@@ -23,11 +23,17 @@ const currentFolderName = document.getElementById('currentFolderName');
 
 const noteModal = document.getElementById('noteModal');
 const btnCloseNote = document.getElementById('btnCloseNote');
+const btnPinNote = document.getElementById('btnPinNote');
 const btnEditNote = document.getElementById('btnEditNote');
 const btnSaveNote = document.getElementById('btnSaveNote');
 const modalNoteTitle = document.getElementById('modalNoteTitle');
 const modalNoteContent = document.getElementById('modalNoteContent');
 const modalNoteEditor = document.getElementById('modalNoteEditor');
+
+const dashboardContainer = document.getElementById('dashboardContainer');
+const pinnedSection = document.getElementById('pinnedSection');
+const pinnedGrid = document.getElementById('pinnedGrid');
+const recentGrid = document.getElementById('recentGrid');
 
 let currentNoteId = null;
 let isEditing = false;
@@ -45,7 +51,7 @@ themeToggle.addEventListener('click', () => {
 async function init() {
   await fetchNotes();
   processData();
-  renderFolders();
+  renderDashboard();
 }
 
 async function fetchNotes() {
@@ -98,26 +104,47 @@ function showDemoData() {
   ];
 }
 
+// YAML Frontmatter parsing helper
+function parseFrontmatter(content) {
+  let pinned = false;
+  let markdown = content;
+  
+  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  if (match) {
+    const yaml = match[1];
+    markdown = content.substring(match[0].length).trim();
+    if (yaml.includes('pinned: true')) {
+      pinned = true;
+    }
+  }
+  return { pinned, markdown };
+}
+
 function processData() {
   foldersMap = {};
   notesData.forEach(note => {
     const f = note.folder || '默认分类';
     if (!foldersMap[f]) foldersMap[f] = [];
     foldersMap[f].push(note);
+    
+    // Parse frontmatter
+    const { pinned, markdown } = parseFrontmatter(note.content);
+    note.isPinned = pinned;
+    note.cleanMarkdown = markdown;
   });
 }
 
-function renderFolders() {
+function renderDashboard() {
   loadingState.classList.add('hidden');
   notesContainer.classList.add('hidden');
-  foldersContainer.classList.remove('hidden');
+  dashboardContainer.classList.remove('hidden');
   
+  // Render Folders
   const folders = Object.keys(foldersMap).sort();
-  
-  let html = '';
+  let foldersHtml = '';
   folders.forEach((f, i) => {
     const count = foldersMap[f].length;
-    html += `
+    foldersHtml += `
       <div class="folder-card" data-folder="${f}" style="animation: fadeUp 0.4s ease forwards ${i * 0.05}s; opacity: 0; transform: translateY(20px);">
         <div class="folder-icon">
           <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
@@ -127,8 +154,41 @@ function renderFolders() {
       </div>
     `;
   });
+  foldersContainer.innerHTML = foldersHtml;
   
-  foldersContainer.innerHTML = html;
+  // Render Pinned Notes
+  const pinnedNotes = notesData.filter(n => n.isPinned);
+  if (pinnedNotes.length > 0) {
+    pinnedSection.classList.remove('hidden');
+    let pinnedHtml = '';
+    pinnedNotes.forEach((note, i) => {
+      let preview = note.cleanMarkdown.replace(/#|\*|_|>|\\n/g, ' ').substring(0, 80);
+      pinnedHtml += `
+        <div class="note-card" data-id="${note.id}" style="animation: fadeUp 0.4s ease forwards ${i * 0.05}s; opacity: 0; border: 2px solid var(--accent);">
+          <div class="note-title">${note.title}</div>
+          <div class="note-preview">${preview}...</div>
+        </div>
+      `;
+    });
+    pinnedGrid.innerHTML = pinnedHtml;
+  } else {
+    pinnedSection.classList.add('hidden');
+  }
+
+  // Render Recent Notes (top 5)
+  const recentNotes = notesData.slice(0, 5);
+  let recentHtml = '';
+  recentNotes.forEach((note, i) => {
+    let preview = note.cleanMarkdown.replace(/#|\*|_|>|\\n/g, ' ').substring(0, 100);
+    recentHtml += `
+      <div class="note-card" data-id="${note.id}" style="animation: fadeUp 0.4s ease forwards ${i * 0.05}s; opacity: 0;">
+        <div class="note-title">${note.title}</div>
+        <div class="note-preview">${preview}...</div>
+        <div class="folder-count" style="margin-top: 8px;">🕒 ${new Date(note.last_modified).toLocaleDateString()}</div>
+      </div>
+    `;
+  });
+  recentGrid.innerHTML = recentHtml;
   
   // Add global animation style if not exists
   if (!document.getElementById('animStyles')) {
@@ -140,16 +200,17 @@ function renderFolders() {
   
   // Event listeners
   document.querySelectorAll('.folder-card').forEach(el => {
-    el.addEventListener('click', () => {
-      openFolder(el.dataset.folder);
-    });
+    el.addEventListener('click', () => openFolder(el.dataset.folder));
+  });
+  document.querySelectorAll('.note-card').forEach(el => {
+    el.addEventListener('click', () => openNote(el.dataset.id));
   });
 }
 
 function openFolder(folderName) {
   currentFolder = folderName;
   currentFolderName.textContent = folderName;
-  foldersContainer.classList.add('hidden');
+  dashboardContainer.classList.add('hidden');
   notesContainer.classList.remove('hidden');
   
   renderNotes(foldersMap[folderName] || []);
@@ -158,8 +219,7 @@ function openFolder(folderName) {
 function renderNotes(notes) {
   let html = '';
   notes.forEach((note, i) => {
-    // Strip markdown formatting for preview
-    let preview = note.content.replace(/#|\*|_|>|\\n/g, ' ').substring(0, 100);
+    let preview = note.cleanMarkdown.replace(/#|\*|_|>|\\n/g, ' ').substring(0, 100);
     html += `
       <div class="note-card" data-id="${note.id}" style="animation: fadeUp 0.4s ease forwards ${i * 0.05}s; opacity: 0; transform: translateX(-20px);">
         <div class="note-title">${note.title}</div>
@@ -185,8 +245,15 @@ function openNote(id) {
   isEditing = false;
   modalNoteTitle.textContent = note.title;
   
+  // Update pin button styling
+  if (note.isPinned) {
+    btnPinNote.classList.add('text-accent');
+  } else {
+    btnPinNote.classList.remove('text-accent');
+  }
+  
   // Parse wiki links [[Note Title]] or [[Folder/Note Title|Alias]]
-  let parsedContent = note.content.replace(/\[\[(.*?)\]\]/g, (match, inner) => {
+  let parsedContent = note.cleanMarkdown.replace(/\[\[(.*?)\]\]/g, (match, inner) => {
     const parts = inner.split('|');
     const target = parts[0];
     const display = parts[1] || target;
@@ -196,6 +263,11 @@ function openNote(id) {
   // Parse markdown
   modalNoteContent.innerHTML = marked.parse(parsedContent);
   modalNoteEditor.value = note.content;
+  
+  // Highlight code blocks
+  modalNoteContent.querySelectorAll('pre code').forEach((block) => {
+    hljs.highlightElement(block);
+  });
   
   // Setup internal link clicks
   modalNoteContent.querySelectorAll('.internal-link').forEach(link => {
@@ -255,16 +327,68 @@ function toggleEditMode() {
   }
 }
 
-async function saveNote() {
+async function togglePin() {
   if (!currentNoteId) return;
   
-  const newContent = modalNoteEditor.value;
+  const noteIndex = notesData.findIndex(n => n.id === currentNoteId);
+  if (noteIndex === -1) return;
+  
+  const note = notesData[noteIndex];
+  note.isPinned = !note.isPinned;
+  
+  // Update content string with frontmatter
+  let newContent = note.content;
+  const hasFrontmatter = /^---\n([\s\S]*?)\n---/.test(newContent);
+  
+  if (hasFrontmatter) {
+    if (note.isPinned) {
+      if (!newContent.includes('pinned: true')) {
+        newContent = newContent.replace(/^---\n/, '---\npinned: true\n');
+      }
+    } else {
+      newContent = newContent.replace(/\npinned: true\n?/, '\n');
+    }
+  } else {
+    if (note.isPinned) {
+      newContent = `---\npinned: true\n---\n\n${newContent}`;
+    }
+  }
+  
+  // Update UI instantly
+  if (note.isPinned) {
+    btnPinNote.classList.add('text-accent');
+  } else {
+    btnPinNote.classList.remove('text-accent');
+  }
+  
+  // Fake update value in editor just in case
+  modalNoteEditor.value = newContent;
+  
+  // Call saveNote directly since we changed content
+  await saveNote(newContent);
+  
+  // Refresh dashboard
+  processData();
+  if (currentFolder === null) {
+    renderDashboard();
+  }
+}
+
+async function saveNote(overrideContent = null) {
+  if (!currentNoteId) return;
+  
+  const newContent = overrideContent || modalNoteEditor.value;
   const noteIndex = notesData.findIndex(n => n.id === currentNoteId);
   if (noteIndex === -1) return;
   
   // Update local memory
   notesData[noteIndex].content = newContent;
   notesData[noteIndex].last_modified = new Date().toISOString();
+  
+  // Update clean markdown and pinned state for view
+  const { pinned, markdown } = parseFrontmatter(newContent);
+  notesData[noteIndex].isPinned = pinned;
+  notesData[noteIndex].cleanMarkdown = markdown;
   
   // Try to update Supabase
   if (supabaseClient) {
@@ -276,13 +400,10 @@ async function saveNote() {
         
       if (error) {
         console.warn('Failed to save to Supabase:', error);
-        alert('由于未连接数据库，已在本地暂存，刷新后将丢失。');
       }
     } catch (e) {
       console.warn(e);
     }
-  } else {
-    alert('由于未连接数据库，已在本地暂存，刷新后将丢失。');
   }
   
   // Switch back to view mode and re-render
@@ -304,13 +425,13 @@ searchInput.addEventListener('input', (e) => {
     if (currentFolder) {
       openFolder(currentFolder);
     } else {
-      renderFolders();
+      renderDashboard();
     }
     return;
   }
   
   // Searching
-  foldersContainer.classList.add('hidden');
+  dashboardContainer.classList.add('hidden');
   notesContainer.classList.remove('hidden');
   currentFolderName.textContent = '搜索结果';
   
@@ -326,12 +447,13 @@ searchInput.addEventListener('input', (e) => {
 btnBackToFolders.addEventListener('click', () => {
   currentFolder = null;
   searchInput.value = '';
-  renderFolders();
+  renderDashboard();
 });
 
 btnCloseNote.addEventListener('click', closeNote);
+btnPinNote.addEventListener('click', togglePin);
 btnEditNote.addEventListener('click', toggleEditMode);
-btnSaveNote.addEventListener('click', saveNote);
+btnSaveNote.addEventListener('click', () => saveNote());
 
 noteModal.addEventListener('click', (e) => {
   if (e.target === noteModal) closeNote();
