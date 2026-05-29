@@ -55,9 +55,40 @@ def sync_notes():
                 except Exception as e:
                     print(f"Failed to read {rel_path}: {e}")
 
-    if not notes_data:
-        print("No markdown files found.")
-        return
+    print(f"Found {len(notes_data)} local notes.")
+    
+    # Try fetching remote notes first for two-way sync
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/kb_notes?select=id,content,last_modified"
+        res = requests.get(url, headers=headers)
+        if res.status_code == 200:
+            remote_notes = res.json()
+            remote_map = {n['id']: n for n in remote_notes}
+            
+            # Check for newer remote notes to pull
+            for note in notes_data:
+                rid = note['id']
+                if rid in remote_map:
+                    remote = remote_map[rid]
+                    # Compare timestamps
+                    try:
+                        local_time = datetime.fromisoformat(note['last_modified'].replace('Z', '+00:00'))
+                        remote_time = datetime.fromisoformat(remote['last_modified'].replace('Z', '+00:00'))
+                        
+                        if remote_time > local_time:
+                            print(f"Remote is newer for {rid}, pulling changes...")
+                            # Overwrite local file
+                            file_path = os.path.join(OBSIDIAN_DIR, rid)
+                            with open(file_path, 'w', encoding='utf-8') as f:
+                                f.write(remote['content'])
+                            # Update local memory so we don't push the old one back immediately
+                            note['content'] = remote['content']
+                            note['last_modified'] = remote['last_modified']
+                    except Exception as date_e:
+                        print(f"Error parsing date for {rid}: {date_e}")
+                        
+    except Exception as e:
+        print(f"Could not fetch remote notes for two-way sync: {e}")
         
     # Write fallback data.json
     try:
@@ -67,7 +98,7 @@ def sync_notes():
     except Exception as e:
         print(f"Failed to save data.json: {e}")
 
-    print(f"Found {len(notes_data)} notes. Uploading to Supabase...")
+    print(f"Uploading to Supabase...")
     
     # Supabase allows bulk inserts up to a limit. We can chunk it.
     chunk_size = 50
@@ -80,7 +111,6 @@ def sync_notes():
                 print(f"Synced {i + len(chunk)}/{len(notes_data)} notes to Supabase.")
             else:
                 print(f"Failed to sync chunk to Supabase. Status: {res.status_code}")
-                # We don't print full error to avoid clutter, since it usually means table doesn't exist yet
         except Exception as e:
             print(f"Error making request to Supabase: {e}")
 

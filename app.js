@@ -23,8 +23,14 @@ const currentFolderName = document.getElementById('currentFolderName');
 
 const noteModal = document.getElementById('noteModal');
 const btnCloseNote = document.getElementById('btnCloseNote');
+const btnEditNote = document.getElementById('btnEditNote');
+const btnSaveNote = document.getElementById('btnSaveNote');
 const modalNoteTitle = document.getElementById('modalNoteTitle');
 const modalNoteContent = document.getElementById('modalNoteContent');
+const modalNoteEditor = document.getElementById('modalNoteEditor');
+
+let currentNoteId = null;
+let isEditing = false;
 
 // Theme toggle
 const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -175,17 +181,100 @@ function openNote(id) {
   const note = notesData.find(n => n.id === id);
   if (!note) return;
   
+  currentNoteId = id;
+  isEditing = false;
   modalNoteTitle.textContent = note.title;
+  
+  // Parse wiki links [[Note Title]]
+  let parsedContent = note.content.replace(/\[\[(.*?)\]\]/g, (match, title) => {
+    return `<a href="#" class="internal-link" data-target="${title}">${title}</a>`;
+  });
+  
   // Parse markdown
-  modalNoteContent.innerHTML = marked.parse(note.content);
+  modalNoteContent.innerHTML = marked.parse(parsedContent);
+  modalNoteEditor.value = note.content;
+  
+  // Setup internal link clicks
+  modalNoteContent.querySelectorAll('.internal-link').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const targetTitle = e.target.dataset.target;
+      const targetNote = notesData.find(n => n.title.toLowerCase() === targetTitle.toLowerCase());
+      if (targetNote) {
+        openNote(targetNote.id);
+      } else {
+        alert(`未找到笔记: ${targetTitle}`);
+      }
+    });
+  });
+  
+  // Reset UI states
+  modalNoteContent.classList.remove('hidden');
+  modalNoteEditor.classList.add('hidden');
+  btnEditNote.classList.remove('hidden');
+  btnSaveNote.classList.add('hidden');
   
   noteModal.classList.add('open');
   document.body.style.overflow = 'hidden';
 }
 
+function toggleEditMode() {
+  if (!currentNoteId) return;
+  isEditing = !isEditing;
+  
+  if (isEditing) {
+    modalNoteContent.classList.add('hidden');
+    modalNoteEditor.classList.remove('hidden');
+    btnEditNote.classList.add('hidden');
+    btnSaveNote.classList.remove('hidden');
+    modalNoteEditor.focus();
+  } else {
+    modalNoteContent.classList.remove('hidden');
+    modalNoteEditor.classList.add('hidden');
+    btnEditNote.classList.remove('hidden');
+    btnSaveNote.classList.add('hidden');
+  }
+}
+
+async function saveNote() {
+  if (!currentNoteId) return;
+  
+  const newContent = modalNoteEditor.value;
+  const noteIndex = notesData.findIndex(n => n.id === currentNoteId);
+  if (noteIndex === -1) return;
+  
+  // Update local memory
+  notesData[noteIndex].content = newContent;
+  notesData[noteIndex].last_modified = new Date().toISOString();
+  
+  // Try to update Supabase
+  if (supabaseClient) {
+    try {
+      const { error } = await supabaseClient
+        .from('kb_notes')
+        .update({ content: newContent, last_modified: notesData[noteIndex].last_modified })
+        .eq('id', currentNoteId);
+        
+      if (error) {
+        console.warn('Failed to save to Supabase:', error);
+        alert('由于未连接数据库，已在本地暂存，刷新后将丢失。');
+      }
+    } catch (e) {
+      console.warn(e);
+    }
+  } else {
+    alert('由于未连接数据库，已在本地暂存，刷新后将丢失。');
+  }
+  
+  // Switch back to view mode and re-render
+  openNote(currentNoteId);
+}
+
 function closeNote() {
   noteModal.classList.remove('open');
   document.body.style.overflow = '';
+  currentNoteId = null;
+  isEditing = false;
 }
 
 // Search
@@ -222,6 +311,9 @@ btnBackToFolders.addEventListener('click', () => {
 });
 
 btnCloseNote.addEventListener('click', closeNote);
+btnEditNote.addEventListener('click', toggleEditMode);
+btnSaveNote.addEventListener('click', saveNote);
+
 noteModal.addEventListener('click', (e) => {
   if (e.target === noteModal) closeNote();
 });
